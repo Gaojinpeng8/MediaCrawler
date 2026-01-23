@@ -54,6 +54,7 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
         playwright_page: Page,
         cookie_dict: Dict[str, str],
         proxy_ip_pool: Optional["ProxyIpPool"] = None,
+        config,
     ):
         self.proxy = proxy
         self.timeout = timeout
@@ -62,6 +63,8 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
         self._extractor = ZhihuExtractor()
         # Initialize proxy pool (from ProxyRefreshMixin)
         self.init_proxy_pool(proxy_ip_pool)
+        self.logger = utils.get_logger("zh")
+        self.config = config
 
     async def _pre_headers(self, url: str) -> Dict:
         """
@@ -220,7 +223,7 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
             "vertical": note_type.value,
         }
         search_res = await self.get(uri, params)
-        utils.logger.info(f"[ZhiHuClient.get_note_by_keyword] Search result: {search_res}")
+        # utils.logger.info(f"[ZhiHuClient.get_note_by_keyword] Search result: {search_res}")
         return self._extractor.extract_contents_from_search(search_res)
 
     async def get_root_comments(
@@ -311,9 +314,11 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
 
             if not comments:
                 break
-
+            comments = [dict(x) for x in comments]
+            note_id = content.content_id
+            note_type = content.content_type
             if callback:
-                await callback(comments)
+                await callback(note_id, comments, note_type, self.config)
 
             result.extend(comments)
             await self.get_comments_all_sub_comments(content, comments, crawl_interval=crawl_interval, callback=callback)
@@ -338,7 +343,7 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
         Returns:
 
         """
-        if not config.ENABLE_GET_SUB_COMMENTS:
+        if not self.config.ENABLE_GET_SUB_COMMENTS:
             return []
 
         all_sub_comments: List[ZhihuComment] = []
@@ -356,13 +361,14 @@ class ZhiHuClient(AbstractApiClient, ProxyRefreshMixin):
                 paging_info = child_comment_res.get("paging", {})
                 is_end = paging_info.get("is_end")
                 offset = self._extractor.extract_offset(paging_info)
-                sub_comments = self._extractor.extract_comments(content, child_comment_res.get("data"))
+                sub_comments = self._extractor.extract_comments(content, child_comment_res.get("data"), self.config)
 
                 if not sub_comments:
                     break
-
+                note_id = content.content_id
+                note_type = content.content_type
                 if callback:
-                    await callback(sub_comments)
+                    await callback(note_id, comments, note_type, self.config)
 
                 all_sub_comments.extend(sub_comments)
                 await asyncio.sleep(crawl_interval)

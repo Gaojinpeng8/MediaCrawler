@@ -18,8 +18,8 @@
 # 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
 
 # 基础配置
-PLATFORM = "xhs"  # 平台，xhs | dy | ks | bili | wb | tieba | zhihu
-KEYWORDS = "编程副业,编程兼职"  # 关键词搜索配置，以英文逗号分隔
+PLATFORM = "wb"  # 平台，xhs | dy | ks | bili | wb | tieba | zhihu
+KEYWORDS = "小红书‘抗炎饮食’标签流量异常引发平台整治"  # 关键词搜索配置，以英文逗号分隔
 LOGIN_TYPE = "qrcode"  # qrcode or phone or cookie
 COOKIES = ""
 CRAWLER_TYPE = (
@@ -71,13 +71,14 @@ BROWSER_LAUNCH_TIMEOUT = 60
 AUTO_CLOSE_BROWSER = True
 
 # 数据保存类型选项配置,支持六种类型：csv、db、json、sqlite、excel、postgres, 最好保存到DB，有排重的功能。
-SAVE_DATA_OPTION = "json"  # csv or db or json or sqlite or excel or postgres
+SAVE_DATA_OPTION = "db"  # csv or db or json or sqlite or excel or postgres
 
 # 用户浏览器缓存的浏览器文件配置
 USER_DATA_DIR = "%s_user_data_dir"  # %s will be replaced by platform name
 
 # 爬取开始页数 默认从第一页开始
 START_PAGE = 1
+END_PAGE = 100
 
 # 爬取视频/帖子的数量控制
 CRAWLER_MAX_NOTES_COUNT = 15
@@ -93,6 +94,7 @@ ENABLE_GET_COMMENTS = True
 
 # 爬取一级评论的数量控制(单视频/帖子)
 CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES = 10
+CRAWLER_MAX_COMMENT_COUNT = 20
 
 # 是否开启爬二级评论模式, 默认不开启爬二级评论
 # 老版本项目使用了 db, 则需参考 schema/tables.sql line 287 增加表字段
@@ -115,7 +117,17 @@ STOP_WORDS_FILE = "./docs/hit_stopwords.txt"
 FONT_PATH = "./docs/STZHONGS.TTF"
 
 # 爬取间隔时间
-CRAWLER_MAX_SLEEP_SEC = 2
+CRAWLER_MAX_SLEEP_SEC = 0.5
+
+# 更新日期，格式：YYYY-MM-DD HH:MM:SS
+UPDATE_DATE = "2025-11-08 00:00:00"
+
+
+# 是否更新
+UPDATE = False
+
+# 最大页面数
+MAX_PAGES = 100
 
 from .bilibili_config import *
 from .xhs_config import *
@@ -124,3 +136,10 @@ from .ks_config import *
 from .weibo_config import *
 from .tieba_config import *
 from .zhihu_config import *
+
+# 设置一些二级评论爬取的要求。只有有热度的二级评论才爬取
+SUBCOMMENT_VIEW=100
+SUBCOMMENT_LIKE=10
+MONITOR_PLAN_ID=-1
+SEARCH_KEYWORD_ID=-1
+KEYWORD_SEPARATOR="|"

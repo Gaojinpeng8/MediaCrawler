@@ -1,129 +1,144 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2025 relakkes@gmail.com
-#
-# This file is part of MediaCrawler project.
-# Repository: https://github.com/NanmiCoder/MediaCrawler/blob/main/store/kuaishou/__init__.py
-# GitHub: https://github.com/NanmiCoder
-# Licensed under NON-COMMERCIAL LEARNING LICENSE 1.1
-#
-
-# 声明：本代码仅供学习和研究目的使用。使用者应遵守以下原则：
-# 1. 不得用于任何商业用途。
-# 2. 使用时应遵守目标平台的使用条款和robots.txt规则。
-# 3. 不得进行大规模爬取或对平台造成运营干扰。
-# 4. 应合理控制请求频率，避免给目标平台带来不必要的负担。
-# 5. 不得用于任何非法或不当的用途。
-#
-# 详细许可条款请参阅项目根目录下的LICENSE文件。
-# 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
-
-
-# -*- coding: utf-8 -*-
 # @Author  : relakkes@gmail.com
 # @Time    : 2024/1/14 20:03
 # @Desc    :
 from typing import List
 
-import config
-from var import source_keyword_var
 
-from ._store_impl import *
+from .kuaishou_store_impl import *
+from schema.async_db import PlanContentDB
+from schema import PlanContentEntity
 
 
 class KuaishouStoreFactory:
     STORES = {
         "csv": KuaishouCsvStoreImplement,
         "db": KuaishouDbStoreImplement,
-        "postgres": KuaishouDbStoreImplement,
-        "json": KuaishouJsonStoreImplement,
-        "sqlite": KuaishouSqliteStoreImplement,
-        "mongodb": KuaishouMongoStoreImplement,
-        "excel": KuaishouExcelStoreImplement,
+        "json": KuaishouJsonStoreImplement
     }
 
     @staticmethod
-    def create_store() -> AbstractStore:
+    def create_store(config) -> AbstractStore:
         store_class = KuaishouStoreFactory.STORES.get(config.SAVE_DATA_OPTION)
         if not store_class:
             raise ValueError(
-                "[KuaishouStoreFactory.create_store] Invalid save option only supported csv or db or json or sqlite or mongodb or excel ...")
+                "[KuaishouStoreFactory.create_store] Invalid save option only supported csv or db or json ...")
         return store_class()
 
+async def update_ks_hotlist(hotlist_item: Dict, config):
+    save_hotlist_item = {
+        "hot_title": hotlist_item.get("hot_title"),
+        "hot_time": utils.get_current_timestamp(), 
+        "hot_rank": hotlist_item.get("hot_rank"),
+        "hot_score": int(float(hotlist_item.get("hot_score")[:-1]) * 10000),
+        "hot_source": "ks",    
+        "hot_video_ids": str(hotlist_item.get("hot_videoIds"))[1:-1]
+    }
+    # utils.logger.info(f"[store.xhs.update_xhs_hotlist] ks hotlist: {hotlist_item}")
+    ksF = KuaishouStoreFactory.create_store(config)
+    content_id = await ksF.store_hotlist(save_hotlist_item)
+    extract_info_item = {
+        "content_id": content_id,
+        "content_type": 1,
+        "content_source": "ks",
+        "domain": ""
+    }
+    await ksF.store_extract_info(extract_info_item)
 
-async def update_kuaishou_video(video_item: Dict):
+async def update_kuaishou_video(video_item: Dict, hot_id: None=None, config=None):
     photo_info: Dict = video_item.get("photo", {})
+    if not photo_info:
+        return 
     video_id = photo_info.get("id")
     if not video_id:
         return
     user_info = video_item.get("author", {})
+    # 先存视频链接到mongoDB
+    ksF = KuaishouStoreFactory.create_store(config)
+    view_count = photo_info.get("viewCount")
+    if view_count.endswith("万") or view_count.endswith("w") or view_count.endswith("W"):
+        view_count = int(float(view_count[:-1]) * 10000)
+    else:
+        view_count = int(float(view_count))
+    # content_download_id = await ksF.store_video({"video_download_url": photo_info.get("photoUrl", "")})
     save_content_item = {
-        "video_id": video_id,
-        "video_type": str(video_item.get("type")),
-        "title": photo_info.get("caption", "")[:500],
-        "desc": photo_info.get("caption", "")[:500],
-        "create_time": photo_info.get("timestamp"),
-        "user_id": user_info.get("id"),
-        "nickname": user_info.get("name"),
-        "avatar": user_info.get("headerUrl", ""),
-        "liked_count": str(photo_info.get("realLikeCount")),
-        "viewd_count": str(photo_info.get("viewCount")),
-        "last_modify_ts": utils.get_current_timestamp(),
-        "video_url": f"https://www.kuaishou.com/short-video/{video_id}",
-        "video_cover_url": photo_info.get("coverUrl", ""),
-        "video_play_url": photo_info.get("photoUrl", ""),
-        "source_keyword": source_keyword_var.get(),
+        "hot_id": hot_id,
+        "content_source": "ks",
+        "content_title": photo_info.get("caption", ""),
+        "content_desc": photo_info.get("caption", ""),
+        "content_id": video_id,
+        "content_crawl_time": utils.get_current_timestamp(),
+        "content_time": photo_info.get("timestamp"),
+        "content_user_id": user_info.get("id"),
+        "content_user_home": f"https://www.kuaishou.com/profile/{user_info.get('id')}",
+        "content_user_nickname": user_info.get("name"),
+        "content_user_gender": user_info.get("gender", -1),
+        "content_viewd_cnt": view_count,
+        "content_liked_cnt": photo_info.get("realLikeCount"),
+        "content_url": f"https://www.kuaishou.com/short-video/{video_id}",
+        "content_cover_url": photo_info.get("coverUrl", ""),
+        "content_videos": photo_info.get("photoUrl", ""),
     }
-    utils.logger.info(
-        f"[store.kuaishou.update_kuaishou_video] Kuaishou video id:{video_id}, title:{save_content_item.get('title')}")
-    await KuaishouStoreFactory.create_store().store_content(content_item=save_content_item)
+    # utils.logger.info(
+        # f"[store.kuaishou.update_kuaishou_video] Kuaishou video id:{video_id}, title:{save_content_item.get('content_desc')[:50]}")
+    content_id = await ksF.store_content(save_content_item)
+    extract_info_item = {
+        "content_id": content_id,
+        "content_type": 2,
+        "content_source": "ks",
+        "domain": ""
+    }
+    await ksF.store_extract_info(extract_info_item)
+    # 监控方案与内容关联：写入 plan_content 表
+    try:
+        if getattr(config, 'MONITOR_PLAN_ID', -1) != -1 and getattr(config, 'SEARCH_KEYWORD_ID', -1) != -1:
+            plan_content_db = PlanContentDB()
+            exist_item = await plan_content_db.query_by_plan_content(config.MONITOR_PLAN_ID, content_id, content_type=2)
+            if not exist_item:
+                plan_content_item = PlanContentEntity(
+                    plan_id=config.MONITOR_PLAN_ID,
+                    content_id=content_id,
+                    content_type=2,
+                    keyword_id=config.SEARCH_KEYWORD_ID,
+                )
+                await plan_content_db.insert(plan_content_item)
+    except Exception as e:
+        utils.logger.error(f"[store.kuaishou.update_kuaishou_video] plan_content link failed: {e}")
 
-
-async def batch_update_ks_video_comments(video_id: str, comments: List[Dict]):
-    utils.logger.info(f"[store.kuaishou.batch_update_ks_video_comments] video_id:{video_id}, comments:{comments}")
+async def batch_update_ks_video_comments(video_id: str, comments: List[Dict], config):
     if not comments:
         return
+    # utils.logger.info(f"[store.kuaishou.batch_update_ks_video_comments] video_id:{video_id}, comments:{comments}")
     for comment_item in comments:
-        await update_ks_video_comment(video_id, comment_item)
+        await update_ks_video_comment(video_id, comment_item, config)
 
-
-async def update_ks_video_comment(video_id: str, comment_item: Dict):
-    # V2 API uses snake_case field names and comment_id is int type
-    # Old GraphQL API used camelCase field names
-    # Support both formats for backward compatibility
-    comment_id = comment_item.get("comment_id") or comment_item.get("commentId")
+async def update_ks_video_comment(video_id: str, comment_item: Dict, config):
+    comment_id = comment_item.get("comment_id")
+    if comment_item.get("commentCount", 0) == None:
+        subCommentCount = 0
+    else:
+        subCommentCount = comment_item.get("commentCount", 0)
     save_comment_item = {
-        "comment_id": str(comment_id) if comment_id else None,  # Convert to string for storage
-        "create_time": comment_item.get("timestamp"),
-        "video_id": video_id,
-        "content": comment_item.get("content"),
-        # V2: author_id, Old: authorId
-        "user_id": comment_item.get("author_id") or comment_item.get("authorId"),
-        # V2: author_name, Old: authorName
-        "nickname": comment_item.get("author_name") or comment_item.get("authorName"),
-        "avatar": comment_item.get("headurl"),
-        # V2: commentCount, Old: subCommentCount
-        "sub_comment_count": str(comment_item.get("commentCount") or comment_item.get("subCommentCount", 0)),
-        "last_modify_ts": utils.get_current_timestamp(),
+        "content_id": video_id,
+        "comment_id": comment_id,
+        "par_comment_id": comment_item.get("reply_to", "0"),
+        "comment_crawl_time": utils.get_current_timestamp(),
+        "comment_time": comment_item.get("timestamp"),
+        "comment_desc": comment_item.get("content"),
+        "sub_comment_cnt": subCommentCount,
+        "comment_liked_cnt": comment_item.get("likedCount"),
+        "comment_user_id": comment_item.get("author_id"),
+        "comment_user_nickname": comment_item.get("author_name"),
+        "comment_source": "ks"
     }
-    utils.logger.info(
-        f"[store.kuaishou.update_ks_video_comment] Kuaishou video comment: {comment_id}, content: {save_comment_item.get('content')}")
-    await KuaishouStoreFactory.create_store().store_comment(comment_item=save_comment_item)
-
-async def save_creator(user_id: str, creator: Dict):
-    ownerCount = creator.get('ownerCount', {})
-    profile = creator.get('profile', {})
-
-    local_db_item = {
-        'user_id': user_id,
-        'nickname': profile.get('user_name'),
-        'gender': 'Female' if profile.get('gender') == "F" else 'Male',
-        'avatar': profile.get('headurl'),
-        'desc': profile.get('user_text'),
-        'ip_location': "",
-        'follows': ownerCount.get("follow"),
-        'fans': ownerCount.get("fan"),
-        'interaction': ownerCount.get("photo_public"),
-        "last_modify_ts": utils.get_current_timestamp(),
+    # utils.logger.info(
+        # f"[store.kuaishou.update_ks_video_comment] Kuaishou video comment: {comment_id}, content: {comment_item.get('comment_desc')}")
+    ksF = KuaishouStoreFactory.create_store(config)
+    content_id = await ksF.store_comment(save_comment_item)
+    extract_info_item = {
+        "content_id": content_id,
+        "content_type": 3,
+        "content_source": "ks",
+        "domain": ""
     }
-    utils.logger.info(f"[store.kuaishou.save_creator] creator:{local_db_item}")
-    await KuaishouStoreFactory.create_store().store_creator(local_db_item)
+    await ksF.store_extract_info(extract_info_item)

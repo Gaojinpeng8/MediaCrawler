@@ -1,48 +1,63 @@
-# -*- coding: utf-8 -*-
-# Copyright (c) 2025 relakkes@gmail.com
-#
-# This file is part of MediaCrawler project.
-# Repository: https://github.com/NanmiCoder/MediaCrawler/blob/main/tools/utils.py
-# GitHub: https://github.com/NanmiCoder
-# Licensed under NON-COMMERCIAL LEARNING LICENSE 1.1
-#
-
-# 声明：本代码仅供学习和研究目的使用。使用者应遵守以下原则：
-# 1. 不得用于任何商业用途。
-# 2. 使用时应遵守目标平台的使用条款和robots.txt规则。
-# 3. 不得进行大规模爬取或对平台造成运营干扰。
-# 4. 应合理控制请求频率，避免给目标平台带来不必要的负担。
-# 5. 不得用于任何非法或不当的用途。
-#
-# 详细许可条款请参阅项目根目录下的LICENSE文件。
-# 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
-
-
 import argparse
 import logging
+from loguru import logger
+import os
+import sys
 
 from .crawler_util import *
 from .slider_util import *
 from .time_util import *
 
 
-def init_loging_config():
-    level = logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s %(name)s %(levelname)s (%(filename)s:%(lineno)d) - %(message)s",
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    _logger = logging.getLogger("MediaCrawler")
-    _logger.setLevel(level)
-
-    # Disable httpx INFO level logs
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-
-    return _logger
+# def init_loging_config():
+#     level = logging.INFO
+#     logging.basicConfig(
+#         level=level,
+#         format="%(asctime)s [%(threadName)s] %(name)s %(levelname)s (%(filename)s:%(lineno)d) - %(message)s",
+#         datefmt='%Y-%m-%d %H:%M:%S'
+#     )
+#     _logger = logging.getLogger("MediaCrawler")
+#     _logger.setLevel(level)
+#     return _logger
 
 
-logger = init_loging_config()
+# logger = init_loging_config()
+
+def get_logger(plaform: str):
+    folder_ = "./log/"
+    prefix_ = f"{plaform}/"
+    rotation_ = "10 MB"
+    retention_ = "5 days"
+    encoding_ = "utf-8"
+    backtrace_ = True
+    diagnose_ = True
+
+    # 格式里面添加了process和thread记录，方便查看多进程和线程程序
+    format_ = '<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> ' \
+                '| <magenta>{process}</magenta>:<yellow>{thread}</yellow> ' \
+                '| <cyan>{name}</cyan>:<cyan>{function}</cyan>:<yellow>{line}</yellow> - <level>{message}</level>'
+
+    # 确保日志目录存在
+    os.makedirs(os.path.join(folder_, prefix_), exist_ok=True)
+
+    logger.remove()
+    # 控制台输出：满足“也输出到控制台”的需求
+    logger.add(sys.stdout, level="INFO", backtrace=backtrace_, diagnose=diagnose_,
+               format=format_, colorize=True, enqueue=True)
+    # 这里面采用了层次式的日志记录方式，就是低级日志文件会记录比他高的所有级别日志，这样可以做到低等级日志最丰富，高级别日志更少更关键
+    # info
+    logger.add(folder_ + prefix_ + "info.log", level="INFO", backtrace=backtrace_, diagnose=diagnose_,
+                format=format_, colorize=False, enqueue=True,
+                rotation=rotation_, retention=retention_, encoding=encoding_,
+                filter=lambda record: record["level"].no >= logger.level("INFO").no)
+
+    # error
+    logger.add(folder_ + prefix_ + "error.log", level="ERROR", backtrace=backtrace_, diagnose=diagnose_,
+                format=format_, colorize=False, enqueue=True,
+                rotation=rotation_, retention=retention_, encoding=encoding_,
+                filter=lambda record: record["level"].no >= logger.level("ERROR").no)
+    return logger
+
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -53,3 +68,16 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
+def dict2object(config_dict: Dict):
+    import types
+    config = types.SimpleNamespace(**config_dict)
+    return config
+    
+def module2object(config):
+    custom_attributes = [attr for attr in dir(config) if not attr.startswith('__') and not attr.endswith('__')][:-3]
+    new_config = {}
+    for attr in custom_attributes:
+        new_config[attr] = getattr(config, attr)
+    return dict2object(new_config)

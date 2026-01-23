@@ -1,0 +1,3 @@
+API_KEY = ""
+LLM_MODEL_NAME = ""
+API_URL = ""

@@ -40,14 +40,17 @@ class ZhiHuLogin(AbstractLogin):
                  browser_context: BrowserContext,
                  context_page: Page,
                  login_phone: Optional[str] = "",
-                 cookie_str: str = ""
+                 cookie_str: str = "",
+                 config = None
                  ):
         config.LOGIN_TYPE = login_type
         self.browser_context = browser_context
         self.context_page = context_page
         self.login_phone = login_phone
         self.cookie_str = cookie_str
-
+        self.logger = utils.get_logger("zh")
+        self.config = config
+        
     @retry(stop=stop_after_attempt(600), wait=wait_fixed(1), retry=retry_if_result(lambda value: value is False))
     async def check_login_state(self) -> bool:
         """

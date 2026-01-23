@@ -1,23 +1,4 @@
 # -*- coding: utf-8 -*-
-# Copyright (c) 2025 relakkes@gmail.com
-#
-# This file is part of MediaCrawler project.
-# Repository: https://github.com/NanmiCoder/MediaCrawler/blob/main/store/weibo/__init__.py
-# GitHub: https://github.com/NanmiCoder
-# Licensed under NON-COMMERCIAL LEARNING LICENSE 1.1
-#
-
-# 声明：本代码仅供学习和研究目的使用。使用者应遵守以下原则：
-# 1. 不得用于任何商业用途。
-# 2. 使用时应遵守目标平台的使用条款和robots.txt规则。
-# 3. 不得进行大规模爬取或对平台造成运营干扰。
-# 4. 应合理控制请求频率，避免给目标平台带来不必要的负担。
-# 5. 不得用于任何非法或不当的用途。
-#
-# 详细许可条款请参阅项目根目录下的LICENSE文件。
-# 使用本代码即表示您同意遵守上述原则和LICENSE中的所有条款。
-
-# -*- coding: utf-8 -*-
 # @Author  : relakkes@gmail.com
 # @Time    : 2024/1/14 21:34
 # @Desc    :
@@ -25,178 +6,161 @@
 import re
 from typing import List
 
-from var import source_keyword_var
 
-from .weibo_store_media import *
-from ._store_impl import *
-
+from .weibo_store_image import *
+from .weibo_store_impl import *
+from schema.async_db import PlanContentDB
+from schema import PlanContentEntity
 
 class WeibostoreFactory:
     STORES = {
         "csv": WeiboCsvStoreImplement,
         "db": WeiboDbStoreImplement,
-        "postgres": WeiboDbStoreImplement,
         "json": WeiboJsonStoreImplement,
-        "sqlite": WeiboSqliteStoreImplement,
-        "mongodb": WeiboMongoStoreImplement,
-        "excel": WeiboExcelStoreImplement,
     }
 
     @staticmethod
-    def create_store() -> AbstractStore:
+    def create_store(config) -> AbstractStore:
         store_class = WeibostoreFactory.STORES.get(config.SAVE_DATA_OPTION)
         if not store_class:
-            raise ValueError("[WeibotoreFactory.create_store] Invalid save option only supported csv or db or json or sqlite or mongodb or excel ...")
+            raise ValueError(
+                "[WeibotoreFactory.create_store] Invalid save option only supported csv or db or json ...")
         return store_class()
 
+async def update_weibo_hotlist(hotlist_item: Dict, rank: int, config):
+    if hotlist_item.get("desc_extr"):
+        if type(hotlist_item.get("desc_extr")) == int:
+            hot_score = hotlist_item.get("desc_extr")
+        elif hotlist_item.get("desc_extr") == "":
+            hot_score = 0
+        else:
+            hot_score = int(hotlist_item.get("desc_extr").split(" ")[1])
+    else:
+        hot_score = 0
+    save_hotlist_item = {
+        "hot_title": hotlist_item.get("desc"),
+        "hot_time": utils.get_current_timestamp(),
+        "hot_rank": rank,
+        "hot_score": hot_score,
+        "hot_source": "wb",
+    }
+    # utils.logger.info(f"[store.weibo.update_weibo_hotlist] xhs hotlist: {save_hotlist_item}")
+    wbF = WeibostoreFactory.create_store(config)
+    content_id = await wbF.store_hotlist(save_hotlist_item)
+    extract_info_item = {
+        "content_id": content_id,
+        "content_type": 1,
+        "content_source": "wb",
+        "domain": ""
+    }
+    await wbF.store_extract_info(extract_info_item)
 
-async def batch_update_weibo_notes(note_list: List[Dict]):
-    """
-    Batch update weibo notes
-    Args:
-        note_list:
-
-    Returns:
-
-    """
-    if not note_list:
-        return
-    for note_item in note_list:
-        await update_weibo_note(note_item)
-
-
-async def update_weibo_note(note_item: Dict):
-    """
-    Update weibo note
-    Args:
-        note_item:
-
-    Returns:
-
-    """
-    if not note_item:
-        return
-
+async def update_weibo_note(note_item: Dict, hot_id=None, clean_text=None, pic_id=None,config=None):
     mblog: Dict = note_item.get("mblog")
     user_info: Dict = mblog.get("user")
     note_id = mblog.get("id")
-    content_text = mblog.get("text")
-    clean_text = re.sub(r"<.*?>", "", content_text)
+    if user_info.get("gender", "") == 'f':
+        content_user_gender = 0
+    elif user_info.get("gender", "") == 'm':
+        content_user_gender = 1
+    else:
+        content_user_gender = -1
     save_content_item = {
-        # 微博信息
-        "note_id": note_id,
-        "content": clean_text,
-        "create_time": utils.rfc2822_to_timestamp(mblog.get("created_at")),
-        "create_date_time": str(utils.rfc2822_to_china_datetime(mblog.get("created_at"))),
-        "liked_count": str(mblog.get("attitudes_count", 0)),
-        "comments_count": str(mblog.get("comments_count", 0)),
-        "shared_count": str(mblog.get("reposts_count", 0)),
-        "last_modify_ts": utils.get_current_timestamp(),
-        "note_url": f"https://m.weibo.cn/detail/{note_id}",
-        "ip_location": mblog.get("region_name", "").replace("发布于 ", ""),
-
-        # 用户信息
-        "user_id": str(user_info.get("id")),
-        "nickname": user_info.get("screen_name", ""),
-        "gender": user_info.get("gender", ""),
-        "profile_url": user_info.get("profile_url", ""),
-        "avatar": user_info.get("profile_image_url", ""),
-        "source_keyword": source_keyword_var.get(),
+        # "hot_id": hot_id,
+        "content_source": "wb",
+        "content_id": note_id,
+        "content_crawl_time": utils.get_current_timestamp(),
+        # "content_desc": clean_text,
+        "content_time": int(utils.rfc2822_to_timestamp(mblog.get("created_at"))) * 1000,
+        # "create_date_time": str(utils.rfc2822_to_china_datetime(mblog.get("created_at"))),
+        "content_user_id": str(user_info.get("id")),
+        "content_user_gender": content_user_gender,
+        "content_user_nickname": user_info.get("screen_name", ""),
+        "content_user_home": user_info.get("profile_url", ""),
+        "content_liked_cnt": str(mblog.get("attitudes_count", 0)),
+        "content_comment_cnt": str(mblog.get("comments_count", 0)),
+        "content_shared_cnt": str(mblog.get("reposts_count", 0)),
+        "content_ip": mblog.get("region_name", "").replace("发布于 ", ""),
+        "content_url": f"https://m.weibo.cn/detail/{note_id}",
+        # "content_pics": pic_id,
     }
-    utils.logger.info(f"[store.weibo.update_weibo_note] weibo note id:{note_id}, title:{save_content_item.get('content')[:24]} ...")
-    await WeibostoreFactory.create_store().store_content(content_item=save_content_item)
+    if hot_id:
+        save_content_item["hot_id"] = hot_id
+    if clean_text:
+        save_content_item["content_desc"] = clean_text
+    if pic_id:
+        save_content_item["content_pics"] = pic_id
+    # utils.logger.info(
+    #     f"[store.weibo.update_weibo_note] weibo note id:{note_id}, title:{save_content_item.get('content_desc')[:24]} ...")
+    wbF = WeibostoreFactory.create_store(config)
+    content_id = await wbF.store_content(save_content_item)
+    extract_info_item = {
+        "content_id": content_id,
+        "content_type": 2,
+        "content_source": "wb",
+        "domain": ""
+    }
+    await wbF.store_extract_info(extract_info_item)
+    if config.MONITOR_PLAN_ID != -1 and config.SEARCH_KEYWORD_ID != -1:
+        plan_content_db = PlanContentDB()
+        exist_item = await plan_content_db.query_by_plan_content(config.MONITOR_PLAN_ID, content_id)
+        if not exist_item:
+            plan_content_item = PlanContentEntity(
+                plan_id=config.MONITOR_PLAN_ID,
+                content_id=content_id,
+                content_type=2,
+                keyword_id=config.SEARCH_KEYWORD_ID,
+            )
+            await plan_content_db.insert(plan_content_item)
+    
 
-
-async def batch_update_weibo_note_comments(note_id: str, comments: List[Dict]):
-    """
-    Batch update weibo note comments
-    Args:
-        note_id:
-        comments:
-
-    Returns:
-
-    """
+async def batch_update_weibo_note_comments(note_id: str, comments: List[Dict], config):
     if not comments:
         return
     for comment_item in comments:
-        await update_weibo_note_comment(note_id, comment_item)
+        await update_weibo_note_comment(note_id, comment_item, config)
 
-
-async def update_weibo_note_comment(note_id: str, comment_item: Dict):
-    """
-    Update weibo note comment
-    Args:
-        note_id: weibo note id
-        comment_item: weibo comment item
-
-    Returns:
-
-    """
-    if not comment_item or not note_id:
-        return
+async def update_weibo_note_comment(note_id: str, comment_item: Dict, config):
     comment_id = str(comment_item.get("id"))
     user_info: Dict = comment_item.get("user")
     content_text = comment_item.get("text")
     clean_text = re.sub(r"<.*?>", "", content_text)
+    if user_info.get("gender", "") == 'f':
+        comment_user_gender = 0
+    elif user_info.get("gender", "") == 'm':
+        comment_user_gender = 1
+    else:
+        comment_user_gender = -1
     save_comment_item = {
+        "content_id": note_id,
         "comment_id": comment_id,
-        "create_time": utils.rfc2822_to_timestamp(comment_item.get("created_at")),
-        "create_date_time": str(utils.rfc2822_to_china_datetime(comment_item.get("created_at"))),
-        "note_id": note_id,
-        "content": clean_text,
-        "sub_comment_count": str(comment_item.get("total_number", 0)),
-        "comment_like_count": str(comment_item.get("like_count", 0)),
-        "last_modify_ts": utils.get_current_timestamp(),
-        "ip_location": comment_item.get("source", "").replace("来自", ""),
-        "parent_comment_id": comment_item.get("rootid", ""),
-
-        # 用户信息
-        "user_id": str(user_info.get("id")),
-        "nickname": user_info.get("screen_name", ""),
-        "gender": user_info.get("gender", ""),
-        "profile_url": user_info.get("profile_url", ""),
-        "avatar": user_info.get("profile_image_url", ""),
+        "par_comment_id": comment_item.get('reply_id', 0), # 微博没有二级评论，只有作者回复会有
+        "comment_crawl_time": utils.get_current_timestamp(),
+        "comment_time": int(utils.rfc2822_to_timestamp(comment_item.get("created_at"))) * 1000,
+        # "create_date_time": str(utils.rfc2822_to_china_datetime(comment_item.get("created_at"))),
+        "comment_desc": clean_text,
+        "sub_comment_cnt": str(comment_item.get("total_number", 0)),
+        "comment_liked_cnt": str(comment_item.get("like_count", 0)),
+        "comment_ip": comment_item.get("source", "").replace("来自", ""),
+        "comment_user_id": str(user_info.get("id")),
+        "comment_user_nickname": user_info.get("screen_name", ""),
+        "comment_user_gender": comment_user_gender,
+        "comment_user_home": user_info.get("profile_url", ""),
+        "comment_source": "wb"        
     }
-    utils.logger.info(f"[store.weibo.update_weibo_note_comment] Weibo note comment: {comment_id}, content: {save_comment_item.get('content', '')[:24]} ...")
-    await WeibostoreFactory.create_store().store_comment(comment_item=save_comment_item)
-
-
-async def update_weibo_note_image(picid: str, pic_content, extension_file_name):
-    """
-    Save weibo note image to local
-    Args:
-        picid:
-        pic_content:
-        extension_file_name:
-
-    Returns:
-
-    """
-    await WeiboStoreImage().store_image({"pic_id": picid, "pic_content": pic_content, "extension_file_name": extension_file_name})
-
-
-async def save_creator(user_id: str, user_info: Dict):
-    """
-    Save creator information to local
-    Args:
-        user_id:
-        user_info:
-
-    Returns:
-
-    """
-    local_db_item = {
-        'user_id': user_id,
-        'nickname': user_info.get('screen_name'),
-        'gender': 'Female' if user_info.get('gender') == "f" else 'Male',
-        'avatar': user_info.get('avatar_hd'),
-        'desc': user_info.get('description'),
-        'ip_location': user_info.get("source", "").replace("来自", ""),
-        'follows': user_info.get('follow_count', ''),
-        'fans': user_info.get('followers_count', ''),
-        'tag_list': '',
-        "last_modify_ts": utils.get_current_timestamp(),
+    # utils.logger.info(
+    #     f"[store.weibo.update_weibo_note_comment] Weibo note comment: {comment_id}, content: {save_comment_item.get('comment_desc', '')[:24]} ...")
+    wbF = WeibostoreFactory.create_store(config)
+    content_id = await wbF.store_comment(save_comment_item)
+    extract_info_item = {
+        "content_id": content_id,
+        "content_type": 3,
+        "content_source": "wb",
+        "domain": ""
     }
-    utils.logger.info(f"[store.weibo.save_creator] creator:{local_db_item}")
-    await WeibostoreFactory.create_store().store_creator(local_db_item)
+    await wbF.store_extract_info(extract_info_item)
+
+# async def update_weibo_note_image(picid: str, pic_content, extension_file_name):
+async def update_weibo_note_image(pic_urls, config):
+    # pic_id = await WeiboStoreImage().store_pic({"pic_id": picid, "pic_content": pic_content, "extension_file_name": extension_file_name})
+    return await WeibostoreFactory().create_store(config).store_pic({"pic_urls": pic_urls})

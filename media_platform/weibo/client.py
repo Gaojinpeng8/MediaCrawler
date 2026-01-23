@@ -56,6 +56,7 @@ class WeiboClient(ProxyRefreshMixin):
         playwright_page: Page,
         cookie_dict: Dict[str, str],
         proxy_ip_pool: Optional["ProxyIpPool"] = None,
+        config = None
     ):
         self.proxy = proxy
         self.timeout = timeout
@@ -66,6 +67,8 @@ class WeiboClient(ProxyRefreshMixin):
         self._image_agent_host = "https://i1.wp.com/"
         # Initialize proxy pool (from ProxyRefreshMixin)
         self.init_proxy_pool(proxy_ip_pool)
+        self.logger = utils.get_logger("wb")
+        self.config = config
 
     @retry(stop=stop_after_attempt(5), wait=wait_fixed(3))
     async def request(self, method, url, **kwargs) -> Union[Response, Dict]:
@@ -91,8 +94,14 @@ class WeiboClient(ProxyRefreshMixin):
 
         ok_code = data.get("ok")
         if ok_code == 0:  # response error
-            utils.logger.error(f"[WeiboClient.request] request {method}:{url} err, res:{data}")
-            raise DataFetchError(data.get("msg", "response error"))
+            msg = data.get("msg", "response error")
+            # 特殊处理"这里还没有内容"错误，返回空数据而不是抛出异常
+            if msg == "这里还没有内容":
+                utils.logger.warning(f"[WeiboClient.request] request {method}:{url} returned no content, res:{data}")
+                return {}
+            else:
+                utils.logger.error(f"[WeiboClient.request] request {method}:{url} err, res:{data}")
+                raise DataFetchError(msg)
         elif ok_code != 1:  # unknown error
             utils.logger.error(f"[WeiboClient.request] request {method}:{url} err, res:{data}")
             raise DataFetchError(data.get("msg", "unknown error"))
@@ -210,7 +219,8 @@ class WeiboClient(ProxyRefreshMixin):
         is_end = False
         max_id = -1
         max_id_type = 0
-        while not is_end and len(result) < max_count:
+        self.config.WB_CRAWLER_COMMENT_CNT = 0
+        while not is_end and self.config.WB_CRAWLER_COMMENT_CNT < self.config.CRAWLER_MAX_COMMENT_COUNT:
             comments_res = await self.get_note_comments(note_id, max_id, max_id_type)
             max_id: int = comments_res.get("max_id")
             max_id_type: int = comments_res.get("max_id_type")
@@ -219,7 +229,8 @@ class WeiboClient(ProxyRefreshMixin):
             if len(result) + len(comment_list) > max_count:
                 comment_list = comment_list[:max_count - len(result)]
             if callback:  # If callback function exists, execute it
-                await callback(note_id, comment_list)
+                await callback(note_id, comment_list, self.config)
+            self.config.WB_CRAWLER_COMMENT_CNT += len(comment_list)
             await asyncio.sleep(crawl_interval)
             result.extend(comment_list)
             sub_comment_result = await self.get_comments_all_sub_comments(note_id, comment_list, callback)
@@ -410,3 +421,69 @@ class WeiboClient(ProxyRefreshMixin):
             crawler_total_count += 10
             notes_has_more = notes_res.get("cardlistInfo", {}).get("total", 0) > crawler_total_count
         return result
+    async def get_hotlist_keyword_db(self):
+        """
+        获取热点对应标题
+        Args:
+
+        Returns:
+
+        """
+        self.logger.info("从数据库获取热榜信息")
+        async_db_conn: AsyncMysqlDB = media_crawler_mysqldb_var.get()
+        sql: str = f"select id, hot_title, hot_rank from hotlist where hot_source = 'wb' order by hot_time desc limit 55"
+        hotlists: List[Dict] = await async_db_conn.query(sql)
+        if len(hotlists) > 0:
+            hot_keywords = {}
+            hot_rank = 1
+            for item in hotlists[::-1]:
+                if item["hot_rank"] != hot_rank:
+                    continue
+                hot_keywords[item['id']] = item['hot_title']
+                hot_rank += 1
+            return hot_keywords
+        return dict()
+
+    async def get_full_text(self, note_id): # 获取完整的帖子正文
+        url = "/statuses/extend"
+        params = {
+            "id": note_id
+        }
+        self.logger.info(f"请求获取完整帖子{note_id}信息: {url}?{urlencode(params)}")
+        data: Dict = await self.get(url, params)
+        text = data.get('longTextContent')
+        clean_text = re.sub(r"<.*?>", "", text)
+        return clean_text
+    
+    async def get_update_noteIds_db(self):
+        """
+        获取需要更新的对应帖子ID
+        Args:
+
+        Returns:
+
+        """
+        # 支持到分钟/小时：优先使用 UPDATE_TIME（含小时分钟），否则退到 UPDATE_DATE
+        if hasattr(self.config, "UPDATE_TIME") and self.config.UPDATE_TIME:
+            # 期望格式：YYYY-MM-DD HH:MM
+            begindate = self.config.UPDATE_DATE
+            begints = time_util.get_unix_time_from_time_str(begindate)
+        elif self.config.UPDATE_DATE:
+            # 仅日期，补 00:00:00
+            begindate = self.config.UPDATE_DATE
+            begints = time_util.get_unix_time_from_time_str(begindate)
+        else:
+            # 默认今天 00:00:00
+            begindate = time_util.get_current_date()
+            begints = time_util.get_unix_time_from_time_str(begindate)
+
+        self.logger.info(f"从数据库获取需要更新时段 {begindate} - {time_util.get_current_time()} 的帖子id")
+        
+        async_db_conn: AsyncMysqlDB = media_crawler_mysqldb_var.get() # 秒级别的内容
+        sql: str = f"select content_id, content_crawl_time from content where content_crawl_time > {begints}000 and content_source = 'wb' order by content_crawl_time desc"
+        queryres: List[Dict] = await async_db_conn.query(sql)
+        if len(queryres) > 0:
+            noteIds = [id['content_id'] for id in  queryres]
+            return noteIds
+        self.logger.info("该时间段微博爬虫无爬取数据")
+        return dict()

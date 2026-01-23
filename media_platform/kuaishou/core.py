@@ -49,19 +49,53 @@ from .login import KuaishouLogin
 
 
 class KuaishouCrawler(AbstractCrawler):
+    """快手爬虫实现类
+    
+    继承自AbstractCrawler，实现了快手平台的内容爬取功能，包括：
+    - 关键词搜索爬取
+    - 指定视频爬取
+    - 创作者及其视频爬取
+    - 评论获取
+    
+    属性:
+        context_page: Playwright页面对象
+        ks_client: 快手API客户端
+        browser_context: Playwright浏览器上下文
+        cdp_manager: CDP浏览器管理器（可选）
+    """
     context_page: Page
     ks_client: KuaiShouClient
     browser_context: BrowserContext
     cdp_manager: Optional[CDPBrowserManager]
 
-    def __init__(self):
-        self.index_url = "https://www.kuaishou.com"
-        self.user_agent = utils.get_user_agent()
-        self.cdp_manager = None
-        self.ip_proxy_pool = None  # Proxy IP pool, used for automatic proxy refresh
+    def __init__(self, config: config):
+        """初始化快手爬虫
+        
+        参数:
+            config: 爬虫配置对象
+        """
+        # super().__init__(platform, config)
+        self.index_url = "https://www.kuaishou.com"  # 快手首页URL
+        self.config = config  # 爬虫配置
+        self.user_agent = utils.get_user_agent()  # 获取随机User-Agent
+        self.cdp_manager = None  # CDP浏览器管理器，默认为None
+        self.ip_proxy_pool = None  # 代理IP池，用于自动刷新代理
+        self.logger = utils.get_logger("ks")
 
     async def start(self):
+        """启动快手爬虫
+        
+        流程:
+        1. 初始化代理（如果启用）
+        2. 启动浏览器（根据配置选择CDP模式或标准模式）
+        3. 创建浏览器页面对象并访问快手首页
+        4. 初始化快手API客户端
+        5. 登录快手（如果需要）
+        6. 根据配置的爬虫类型执行不同的爬取任务
+        """
         playwright_proxy_format, httpx_proxy_format = None, None
+        
+        # 初始化代理IP池（如果启用）
         if config.ENABLE_IP_PROXY:
             self.ip_proxy_pool = await create_ip_pool(
                 config.IP_PROXY_POOL_COUNT, enable_validate_ip=True
@@ -71,89 +105,139 @@ class KuaishouCrawler(AbstractCrawler):
                 ip_proxy_info
             )
 
+        # 启动Playwright
         async with async_playwright() as playwright:
-            # Select startup mode based on configuration
-            if config.ENABLE_CDP_MODE:
+            # 根据配置选择浏览器启动模式
+            if self.config.ENABLE_CDP_MODE:
                 utils.logger.info("[KuaishouCrawler] Launching browser using CDP mode")
                 self.browser_context = await self.launch_browser_with_cdp(
                     playwright,
                     playwright_proxy_format,
                     self.user_agent,
-                    headless=config.CDP_HEADLESS,
+                    headless=self.config.CDP_HEADLESS,
                 )
             else:
                 utils.logger.info("[KuaishouCrawler] Launching browser using standard mode")
-                # Launch a browser context.
+                # 启动浏览器上下文
                 chromium = playwright.chromium
                 self.browser_context = await self.launch_browser(
-                    chromium, None, self.user_agent, headless=config.HEADLESS
+                    chromium, None, self.user_agent, headless=self.config.HEADLESS
                 )
-                # stealth.min.js is a js script to prevent the website from detecting the crawler.
+                # 添加stealth.min.js脚本防止网站检测到爬虫
                 await self.browser_context.add_init_script(path="libs/stealth.min.js")
 
-
+            # 创建新的浏览器页面对象并访问快手首页
             self.context_page = await self.browser_context.new_page()
             await self.context_page.goto(f"{self.index_url}?isHome=1")
 
-            # Create a client to interact with the kuaishou website.
+            # 创建快手API客户端
             self.ks_client = await self.create_ks_client(httpx_proxy_format)
+            
+            # 检查客户端连接状态，如果未连接则登录
             if not await self.ks_client.pong():
                 login_obj = KuaishouLogin(
-                    login_type=config.LOGIN_TYPE,
+                    login_type=self.config.LOGIN_TYPE,
                     login_phone=httpx_proxy_format,
                     browser_context=self.browser_context,
                     context_page=self.context_page,
-                    cookie_str=config.COOKIES,
+                    cookie_str=self.config.COOKIES,
                 )
                 await login_obj.begin()
                 await self.ks_client.update_cookies(
                     browser_context=self.browser_context
                 )
 
-            crawler_type_var.set(config.CRAWLER_TYPE)
-            if config.CRAWLER_TYPE == "search":
+            # 设置爬虫类型上下文变量
+            crawler_type_var.set(self.config.CRAWLER_TYPE)
+            
+            # 设置爬虫类型
+            # crawler_type_var.set(getattr(self.config, 'CRAWLER_TYPE', 'search'))
+            crawler_type_var.set(self.config.CRAWLER_TYPE)
+            if self.config.CRAWLER_TYPE == "search":
                 # Search for videos and retrieve their comment information.
-                await self.search()
-            elif config.CRAWLER_TYPE == "detail":
+                self.logger.info("调用快手爬虫关键词搜索功能")
+                await self.search(getattr(self.config, 'KEYWORDS', '').split(","))
+            elif self.config.CRAWLER_TYPE == "detail":
                 # Get the information and comments of the specified post
                 await self.get_specified_videos()
-            elif config.CRAWLER_TYPE == "creator":
-                # Get creator's information and their videos and comments
-                await self.get_creators_and_videos()
+            elif self.config.CRAWLER_TYPE == "hotlist":
+                # Get hot title
+                self.logger.info("调用快手爬虫热榜获取功能")
+                await self.get_hotlist()
+            elif self.config.CRAWLER_TYPE == "hotlist_detail": 
+                # Get hotlist contents
+                self.logger.info("调用快手爬虫获取热榜具体信息功能")
+                await self.get_hotlist_video()
+            elif self.config.CRAWLER_TYPE == "update":
+                # Update contents and comments between chosen date
+                self.logger.info("调用快手爬虫更新功能")
+                await self.update()
             else:
                 pass
+            self.logger.info("快手爬取结束")
+            # 根据爬虫类型执行不同的爬取任务
+            # if config.CRAWLER_TYPE == "search":
+            #     # 执行关键词搜索爬取
+            #     await self.search()
+            # elif config.CRAWLER_TYPE == "detail":
+            #     # 获取指定视频的信息和评论
+            #     await self.get_specified_videos()
+            # elif config.CRAWLER_TYPE == "creator":
+            #     # 获取创作者信息及其视频和评论
+            #     await self.get_creators_and_videos()
+            # else:
+            #     pass
 
             utils.logger.info("[KuaishouCrawler.start] Kuaishou Crawler finished ...")
 
-    async def search(self):
+    async def search(self, keywords: List[str]):
+        """关键词搜索爬取
+        
+        根据配置的关键词列表在快手上搜索相关视频，
+        并爬取视频信息和评论。
+        """
         utils.logger.info("[KuaishouCrawler.search] Begin search kuaishou keywords")
-        ks_limit_count = 20  # kuaishou limit page fixed value
-        if config.CRAWLER_MAX_NOTES_COUNT < ks_limit_count:
-            config.CRAWLER_MAX_NOTES_COUNT = ks_limit_count
-        start_page = config.START_PAGE
-        for keyword in config.KEYWORDS.split(","):
-            search_session_id = ""
-            source_keyword_var.set(keyword)
+        ks_limit_count = 10  # 快手每页固定显示20个视频
+        
+        # 确保爬取数量不小于每页限制
+        if self.config.CRAWLER_MAX_NOTES_COUNT < ks_limit_count:
+            self.config.CRAWLER_MAX_NOTES_COUNT = ks_limit_count
+            
+        start_page = self.config.START_PAGE
+        self.logger.info(f"开始搜索快手关键词，配置: start_page={start_page}, end_page={self.config.END_PAGE}, max_notes={self.config.CRAWLER_MAX_NOTES_COUNT}, limit_count={ks_limit_count}")
+        # 遍历所有关键词
+        for keyword in keywords:
+            search_session_id = ""  # 搜索会话ID
+            source_keyword_var.set(keyword)  # 设置当前搜索关键词上下文变量
             utils.logger.info(
                 f"[KuaishouCrawler.search] Current search keyword: {keyword}"
             )
+            
             page = 1
+            
+            # 循环爬取直到达到最大爬取数量
             while (
                 page - start_page + 1
-            ) * ks_limit_count <= config.CRAWLER_MAX_NOTES_COUNT:
+            ) * ks_limit_count <= self.config.CRAWLER_MAX_NOTES_COUNT:
+                # 跳过起始页之前的页面
                 if page < start_page:
                     utils.logger.info(f"[KuaishouCrawler.search] Skip page: {page}")
                     page += 1
                     continue
+                
                 utils.logger.info(
                     f"[KuaishouCrawler.search] search kuaishou keyword: {keyword}, page: {page}"
                 )
-                video_id_list: List[str] = []
+                video_id_list: List[str] = []  # 存储当前页面的视频ID列表
+                
+                # 使用API客户端搜索关键词相关视频
                 videos_res = await self.ks_client.search_info_by_keyword(
                     keyword=keyword,
                     pcursor=str(page),
                     search_session_id=search_session_id,
                 )
+                
+                # 检查搜索结果
                 if not videos_res:
                     utils.logger.error(
                         f"[KuaishouCrawler.search] search info by keyword:{keyword} not found data"
@@ -161,31 +245,68 @@ class KuaishouCrawler(AbstractCrawler):
                     continue
 
                 vision_search_photo: Dict = videos_res.get("visionSearchPhoto")
+
+                if not vision_search_photo:
+                    self.logger.error(f"快手爬虫搜索关键词{keyword}页面{page}返回数据格式异常，增加页码到{page+1}")
+                    page += 1
+                    continue
+
                 if vision_search_photo.get("result") != 1:
                     utils.logger.error(
                         f"[KuaishouCrawler.search] search info by keyword:{keyword} not found data "
                     )
+                    page += 1
                     continue
+                
+                # 更新搜索会话ID
                 search_session_id = vision_search_photo.get("searchSessionId", "")
-                for video_detail in vision_search_photo.get("feeds"):
-                    video_id_list.append(video_detail.get("photo", {}).get("id"))
-                    await kuaishou_store.update_kuaishou_video(video_item=video_detail)
+                feeds = vision_search_photo.get("feeds", [])
+                
+                if not feeds:
+                    self.logger.warning(f"快手爬虫搜索关键词{keyword}页面{page}未获取到视频数据，增加页码到{page+1}")
+                    page += 1
+                    continue
 
-                # batch fetch video comments
+                # # 处理搜索结果中的视频信息
+                # for video_detail in vision_search_photo.get("feeds"):
+                #     video_id_list.append(video_detail.get("photo", {}).get("id"))
+                #     # 保存视频信息到存储
+                #     await kuaishou_store.update_kuaishou_video(video_item=video_detail)
+                for video_detail in feeds:
+                    if not video_detail:
+                        continue
+                        
+                    photo_info = video_detail.get("photo", {})
+                    if not photo_info:
+                        continue
+                        
+                    video_id = photo_info.get("id")
+                    if video_id:
+                        video_id_list.append(video_id)
+                        await kuaishou_store.update_kuaishou_video(video_item=video_detail, config=self.config)
+
+                # 批量获取视频评论
                 page += 1
 
-                # Sleep after page navigation
+                # 页面导航后休眠，避免请求过于频繁
                 await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
                 utils.logger.info(f"[KuaishouCrawler.search] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after page {page-1}")
 
+                # 批量获取当前页面所有视频的评论
                 await self.batch_get_video_comments(video_id_list)
 
     async def get_specified_videos(self):
-        """Get the information and comments of the specified post"""
+        """获取指定视频的信息和评论
+        
+        根据配置的视频URL列表，解析视频ID并获取视频详细信息和评论。
+        """
         utils.logger.info("[KuaishouCrawler.get_specified_videos] Parsing video URLs...")
-        video_ids = []
+        video_ids = []  # 存储解析后的视频ID列表
+        
+        # 遍历配置中的视频URL列表
         for video_url in config.KS_SPECIFIED_ID_LIST:
             try:
+                # 解析视频URL获取视频信息
                 video_info = parse_video_info_from_url(video_url)
                 video_ids.append(video_info.video_id)
                 utils.logger.info(f"Parsed video ID: {video_info.video_id} from {video_url}")
@@ -193,32 +314,52 @@ class KuaishouCrawler(AbstractCrawler):
                 utils.logger.error(f"Failed to parse video URL: {e}")
                 continue
 
+        # 创建信号量控制并发数
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
+        
+        # 创建视频信息获取任务列表
         task_list = [
             self.get_video_info_task(video_id=video_id, semaphore=semaphore)
             for video_id in video_ids
         ]
+        
+        # 并发获取视频信息
         video_details = await asyncio.gather(*task_list)
+        
+        # 保存视频信息
         for video_detail in video_details:
             if video_detail is not None:
                 await kuaishou_store.update_kuaishou_video(video_detail)
+        
+        # 批量获取视频评论
         await self.batch_get_video_comments(video_ids)
 
     async def get_video_info_task(
         self, video_id: str, semaphore: asyncio.Semaphore
     ) -> Optional[Dict]:
-        """Get video detail task"""
+        """获取视频详细信息的异步任务
+        
+        参数:
+            video_id: 视频ID
+            semaphore: 并发控制信号量
+            
+        返回:
+            视频详细信息字典，如果获取失败则返回None
+        """
         async with semaphore:
             try:
+                # 使用API客户端获取视频详细信息
                 result = await self.ks_client.get_video_info(video_id)
 
-                # Sleep after fetching video details
+                # 获取视频详情后休眠，避免请求过于频繁
                 await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
                 utils.logger.info(f"[KuaishouCrawler.get_video_info_task] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds after fetching video details {video_id}")
 
                 utils.logger.info(
                     f"[KuaishouCrawler.get_video_info_task] Get video_id:{video_id} info result: {result} ..."
                 )
+                
+                # 返回视频详情信息
                 return result.get("visionVideoDetail")
             except DataFetchError as ex:
                 utils.logger.error(
@@ -232,11 +373,12 @@ class KuaishouCrawler(AbstractCrawler):
                 return None
 
     async def batch_get_video_comments(self, video_id_list: List[str]):
+        """批量获取视频评论
+        
+        参数:
+            video_id_list: 视频ID列表
         """
-        batch get video comments
-        :param video_id_list:
-        :return:
-        """
+        # 检查是否启用评论爬取
         if not config.ENABLE_GET_COMMENTS:
             utils.logger.info(
                 f"[KuaishouCrawler.batch_get_video_comments] Crawling comment mode is not enabled"
@@ -246,7 +388,11 @@ class KuaishouCrawler(AbstractCrawler):
         utils.logger.info(
             f"[KuaishouCrawler.batch_get_video_comments] video ids:{video_id_list}"
         )
+        
+        # 创建信号量控制并发数
         semaphore = asyncio.Semaphore(config.MAX_CONCURRENCY_NUM)
+        
+        # 创建评论获取任务列表
         task_list: List[Task] = []
         for video_id in video_id_list:
             task = asyncio.create_task(
@@ -254,15 +400,18 @@ class KuaishouCrawler(AbstractCrawler):
             )
             task_list.append(task)
 
+        # 设置评论任务上下文变量
         comment_tasks_var.set(task_list)
+        
+        # 并发获取所有视频的评论
         await asyncio.gather(*task_list)
 
     async def get_comments(self, video_id: str, semaphore: asyncio.Semaphore):
-        """
-        get comment for video id
-        :param video_id:
-        :param semaphore:
-        :return:
+        """获取单个视频的评论
+        
+        参数:
+            video_id: 视频ID
+            semaphore: 并发控制信号量
         """
         async with semaphore:
             try:
@@ -270,15 +419,16 @@ class KuaishouCrawler(AbstractCrawler):
                     f"[KuaishouCrawler.get_comments] begin get video_id: {video_id} comments ..."
                 )
 
-                # Sleep before fetching comments
+                # 获取评论前休眠，避免请求过于频繁
                 await asyncio.sleep(config.CRAWLER_MAX_SLEEP_SEC)
                 utils.logger.info(f"[KuaishouCrawler.get_comments] Sleeping for {config.CRAWLER_MAX_SLEEP_SEC} seconds before fetching comments for video {video_id}")
 
+                # 获取视频的所有评论
                 await self.ks_client.get_video_all_comments(
                     photo_id=video_id,
                     crawl_interval=config.CRAWLER_MAX_SLEEP_SEC,
                     callback=kuaishou_store.batch_update_ks_video_comments,
-                    max_count=config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
+                    max_count=self.config.CRAWLER_MAX_COMMENTS_COUNT_SINGLENOTES,
                 )
             except DataFetchError as ex:
                 utils.logger.error(
@@ -288,11 +438,12 @@ class KuaishouCrawler(AbstractCrawler):
                 utils.logger.error(
                     f"[KuaishouCrawler.get_comments] may be been blocked, err:{e}"
                 )
-                # use time.sleeep block main coroutine instead of asyncio.sleep and cacel running comment task
-                # maybe kuaishou block our request, we will take a nap and update the cookie again
+                # 可能被快手屏蔽了请求，取消当前所有评论任务
                 current_running_tasks = comment_tasks_var.get()
                 for task in current_running_tasks:
                     task.cancel()
+                
+                # 休眠20秒后重新访问首页并更新cookie
                 time.sleep(20)
                 await self.context_page.goto(f"{self.index_url}?isHome=1")
                 await self.ks_client.update_cookies(
@@ -300,13 +451,24 @@ class KuaishouCrawler(AbstractCrawler):
                 )
 
     async def create_ks_client(self, httpx_proxy: Optional[str]) -> KuaiShouClient:
-        """Create ks client"""
+        """创建快手API客户端
+        
+        参数:
+            httpx_proxy: HTTP代理格式
+            
+        返回:
+            KuaiShouClient对象
+        """
         utils.logger.info(
             "[KuaishouCrawler.create_ks_client] Begin create kuaishou API client ..."
         )
+        
+        # 从浏览器上下文获取并转换cookies
         cookie_str, cookie_dict = utils.convert_cookies(
             await self.browser_context.cookies()
         )
+        
+        # 创建快手API客户端实例
         ks_client_obj = KuaiShouClient(
             proxy=httpx_proxy,
             headers={
@@ -318,7 +480,8 @@ class KuaishouCrawler(AbstractCrawler):
             },
             playwright_page=self.context_page,
             cookie_dict=cookie_dict,
-            proxy_ip_pool=self.ip_proxy_pool,  # Pass proxy pool for automatic refresh
+            proxy_ip_pool=self.ip_proxy_pool,  # 传递代理池用于自动刷新
+            config=self.config,
         )
         return ks_client_obj
 
@@ -329,14 +492,29 @@ class KuaishouCrawler(AbstractCrawler):
         user_agent: Optional[str],
         headless: bool = True,
     ) -> BrowserContext:
-        """Launch browser and create browser context"""
+        """启动浏览器并创建浏览器上下文
+        
+        参数:
+            chromium: Chromium浏览器类型
+            playwright_proxy: Playwright代理格式
+            user_agent: 用户代理字符串
+            headless: 是否无头模式
+            
+        返回:
+            BrowserContext对象
+        """
         utils.logger.info(
             "[KuaishouCrawler.launch_browser] Begin create browser context ..."
         )
+        
+        # 检查是否保存登录状态
         if config.SAVE_LOGIN_STATE:
+            # 创建持久化浏览器上下文目录
             user_data_dir = os.path.join(
                 os.getcwd(), "browser_data", config.USER_DATA_DIR % config.PLATFORM
             )  # type: ignore
+            
+            # 启动持久化浏览器上下文
             browser_context = await chromium.launch_persistent_context(
                 user_data_dir=user_data_dir,
                 accept_downloads=True,
@@ -344,11 +522,14 @@ class KuaishouCrawler(AbstractCrawler):
                 proxy=playwright_proxy,  # type: ignore
                 viewport={"width": 1920, "height": 1080},
                 user_agent=user_agent,
-                channel="chrome",  # Use system's stable Chrome version
+                channel="chrome",  # 使用系统的稳定Chrome版本
             )
             return browser_context
         else:
+            # 启动临时浏览器
             browser = await chromium.launch(headless=headless, proxy=playwright_proxy, channel="chrome")  # type: ignore
+            
+            # 创建新的浏览器上下文
             browser_context = await browser.new_context(
                 viewport={"width": 1920, "height": 1080}, user_agent=user_agent
             )
@@ -361,11 +542,22 @@ class KuaishouCrawler(AbstractCrawler):
         user_agent: Optional[str],
         headless: bool = True,
     ) -> BrowserContext:
-        """
-        Launch browser using CDP mode
+        """使用CDP模式启动浏览器
+        
+        参数:
+            playwright: Playwright实例
+            playwright_proxy: Playwright代理格式
+            user_agent: 用户代理字符串
+            headless: 是否无头模式
+            
+        返回:
+            BrowserContext对象
         """
         try:
+            # 初始化CDP浏览器管理器
             self.cdp_manager = CDPBrowserManager()
+            
+            # 启动并连接CDP浏览器
             browser_context = await self.cdp_manager.launch_and_connect(
                 playwright=playwright,
                 playwright_proxy=playwright_proxy,
@@ -373,7 +565,7 @@ class KuaishouCrawler(AbstractCrawler):
                 headless=headless,
             )
 
-            # Display browser information
+            # 显示浏览器信息
             browser_info = await self.cdp_manager.get_browser_info()
             utils.logger.info(f"[KuaishouCrawler] CDP browser info: {browser_info}")
 
@@ -383,25 +575,30 @@ class KuaishouCrawler(AbstractCrawler):
             utils.logger.error(
                 f"[KuaishouCrawler] CDP mode launch failed, fallback to standard mode: {e}"
             )
-            # Fallback to standard mode
+            # CDP模式失败，回退到标准模式
             chromium = playwright.chromium
             return await self.launch_browser(
                 chromium, playwright_proxy, user_agent, headless
             )
 
     async def get_creators_and_videos(self) -> None:
-        """Get creator's videos and retrieve their comment information."""
+        """获取创作者信息及其视频和评论
+        
+        根据配置的创作者URL列表，获取创作者详细信息、视频列表及视频评论。
+        """
         utils.logger.info(
             "[KuaiShouCrawler.get_creators_and_videos] Begin get kuaishou creators"
         )
+        
+        # 遍历配置中的创作者URL列表
         for creator_url in config.KS_CREATOR_ID_LIST:
             try:
-                # Parse creator URL to get user_id
+                # 解析创作者URL获取用户ID
                 creator_info: CreatorUrlInfo = parse_creator_info_from_url(creator_url)
                 utils.logger.info(f"[KuaiShouCrawler.get_creators_and_videos] Parse creator URL info: {creator_info}")
                 user_id = creator_info.user_id
 
-                # get creator detail info from web html content
+                # 从网页内容获取创作者详细信息
                 createor_info: Dict = await self.ks_client.get_creator_info(user_id=user_id)
                 if createor_info:
                     await kuaishou_store.save_creator(user_id, creator=createor_info)

@@ -59,12 +59,15 @@ class CrawlerFactory:
     }
 
     @staticmethod
-    def create_crawler(platform: str) -> AbstractCrawler:
+    def create_crawler(platform: str, config: config) -> AbstractCrawler:
         crawler_class = CrawlerFactory.CRAWLERS.get(platform)
         if not crawler_class:
             supported = ", ".join(sorted(CrawlerFactory.CRAWLERS))
             raise ValueError(f"Invalid media platform: {platform!r}. Supported: {supported}")
-        return crawler_class()
+        if platform in ['wb', 'ks']:
+            return crawler_class(config)
+        else:
+            return crawler_class(platform, config=config)
 
 
 crawler: Optional[AbstractCrawler] = None
@@ -106,7 +109,7 @@ async def main() -> None:
         print(f"Database {args.init_db} initialized successfully.")
         return
 
-    crawler = CrawlerFactory.create_crawler(platform=config.PLATFORM)
+    crawler = CrawlerFactory.create_crawler(platform=config.PLATFORM, config=args)
     await crawler.start()
 
     _flush_excel_if_needed()

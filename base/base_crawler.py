@@ -24,6 +24,16 @@ from playwright.async_api import BrowserContext, BrowserType, Playwright
 
 
 class AbstractCrawler(ABC):
+    def __init__(self, platform: str, config: dict) -> None:
+        """
+        抽象爬虫基类初始化方法
+        
+        参数:
+            platform: str - 平台名称
+            config: dict - 配置字典
+        """
+        self.platform = platform
+        self.config = config
 
     @abstractmethod
     async def start(self):

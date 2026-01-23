@@ -49,6 +49,7 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
         playwright_page: Page,
         cookie_dict: Dict[str, str],
         proxy_ip_pool: Optional["ProxyIpPool"] = None,
+        config,
     ):
         self.proxy = proxy
         self.timeout = timeout
@@ -60,7 +61,9 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
         self.graphql = KuaiShouGraphQL()
         # Initialize proxy pool (from ProxyRefreshMixin)
         self.init_proxy_pool(proxy_ip_pool)
-
+        self.logger = utils.get_logger("ks")
+        self.config = config
+        
     async def request(self, method, url, **kwargs) -> Any:
         # Check if proxy is expired before each request
         await self._refresh_proxy_if_expired()
@@ -234,8 +237,8 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
 
         result = []
         pcursor = ""
-
-        while pcursor != "no_more" and len(result) < max_count:
+        self.config.KS_CRAWLER_COMMENT_CNT = 0
+        while pcursor != "no_more" and self.config.KS_CRAWLER_COMMENT_CNT < max_count:
             comments_res = await self.get_video_comments(photo_id, pcursor)
             # V2 API returns data at top level, not nested in visionCommentList
             pcursor = comments_res.get("pcursorV2", "no_more")
@@ -243,7 +246,8 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
             if len(result) + len(comments) > max_count:
                 comments = comments[: max_count - len(result)]
             if callback:  # If there is a callback function, execute the callback function
-                await callback(photo_id, comments)
+                await callback(photo_id, comments, self.config)
+            self.config.KS_CRAWLER_COMMENT_CNT += len(comments)
             result.extend(comments)
             await asyncio.sleep(crawl_interval)
             sub_comments = await self.get_comments_all_sub_comments(

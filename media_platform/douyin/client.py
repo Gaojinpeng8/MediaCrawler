@@ -253,6 +253,7 @@ class DouYinClient(AbstractApiClient, ProxyRefreshMixin):
         :param max_count: 一次帖子爬取的最大评论数量
         :return: 评论列表
         """
+        max_count = max_count or getattr(self.config, "CRAWLER_MAX_COMMENT_COUNT", 20)
         result = []
         comments_has_more = 1
         comments_cursor = 0
