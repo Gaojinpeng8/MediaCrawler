@@ -146,7 +146,7 @@ async def update_zhihu_search_note(note_item: Dict, config):
         "question_id": question_id,
         "content_crawl_time": utils.get_current_timestamp(),
         "content_title": extract_text_from_html(note_item.get("title")),
-        "content_desc": extract_text_from_html(note_item.get("content_text", "")),
+        "content_desc": extract_text_from_html(note_item.get("content_text", ""))[:512],
         "content_time": note_item.get("created_time"),
         "content_user_id": note_item.get("user_id'"),
         "content_user_gender": note_item.get("gender", '1'),

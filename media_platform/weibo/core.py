@@ -462,6 +462,8 @@ class WeiboCrawler(AbstractCrawler):
         """Create xhs client"""
         utils.logger.info("[WeiboCrawler.create_weibo_client] Begin create weibo API client ...")
         cookie_str, cookie_dict = utils.convert_cookies(await self.browser_context.cookies(urls=[self.mobile_index_url]))
+        cookie_dict = utils.route_cookie("weibo", cookie_dict)
+        cookie_str = utils.cookie_dict_to_str(cookie_dict)
         weibo_client_obj = WeiboClient(
             proxy=httpx_proxy,
             headers={

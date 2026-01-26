@@ -418,6 +418,8 @@ class ZhihuCrawler(AbstractCrawler):
         cookie_str, cookie_dict = utils.convert_cookies(
             await self.browser_context.cookies()
         )
+        cookie_dict = utils.route_cookie("zh", cookie_dict)
+        cookie_str = utils.cookie_dict_to_str(cookie_dict)
         zhihu_client_obj = ZhiHuClient(
             proxy=httpx_proxy,
             headers={

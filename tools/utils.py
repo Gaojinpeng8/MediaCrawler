@@ -3,6 +3,7 @@ import logging
 from loguru import logger
 import os
 import sys
+from typing import Dict
 
 from .crawler_util import *
 from .slider_util import *
@@ -22,6 +23,102 @@ from .time_util import *
 
 
 # logger = init_loging_config()
+
+
+# cookie/base.py
+
+def cookie_dict_to_str(cookie_dict: dict[str, str]) -> str:
+    """
+    Convert cookie dict to HTTP Cookie header string
+    - 自动过滤空值
+    - 自动转 str
+    """
+    return "; ".join(
+        f"{k}={v}"
+        for k, v in cookie_dict.items()
+        if k and v is not None and v != ""
+    )
+
+class CookieFilter:
+    WHITELIST: set[str] = set()
+    MAX_VALUE_LEN = 600
+    MAX_TOTAL_LEN = 1500
+
+    @classmethod
+    def filter(cls, raw_cookie: Dict[str, str]) -> Dict[str, str]:
+        filtered = {
+            k: v for k, v in raw_cookie.items()
+            if k in cls.WHITELIST and len(v) < cls.MAX_VALUE_LEN
+        }
+
+        # 兜底：总长度限制（防 431）
+        total_len = sum(len(k) + len(v) for k, v in filtered.items())
+        if total_len > cls.MAX_TOTAL_LEN:
+            # 按 value 长度从小到大保留
+            items = sorted(filtered.items(), key=lambda x: len(x[1]))
+            trimmed = {}
+            size = 0
+            for k, v in items:
+                size += len(k) + len(v)
+                if size > cls.MAX_TOTAL_LEN:
+                    break
+                trimmed[k] = v
+            return trimmed
+
+        return filtered
+
+class KuaishouCookieFilter(CookieFilter):
+    WHITELIST = {
+        "did",
+        "clientid",
+        "kpf",
+        "userId",
+        "kuaishou.server.webday7_st",
+        "kuaishou.server.webday7_ph",
+    }
+
+class DouyinCookieFilter(CookieFilter):
+    WHITELIST = {
+        "ttwid",
+        "odin_tt",
+        "sid_tt",
+        "passport_csrf_token",
+        "msToken",
+    }
+
+class ZhihuCookieFilter(CookieFilter):
+    WHITELIST = {
+        "_zap",
+        "d_c0",
+        "z_c0",
+        "__zse_ck",
+    }
+
+class WeiboCookieFilter(CookieFilter):
+    WHITELIST = {
+        "SUB",
+        "SUBP",
+        "SSOLoginState",
+        "ALF",
+    }
+
+
+FILTER_MAP = {
+    'ks': KuaishouCookieFilter,
+    'douyin': DouyinCookieFilter,
+    'zh': ZhihuCookieFilter,
+    'weibo': WeiboCookieFilter,
+}
+
+def route_cookie(
+    platform: str,
+    raw_cookie: Dict[str, str],
+) -> Dict[str, str]:
+    if platform not in FILTER_MAP:
+        raise ValueError(f"Unsupported platform: {platform}")
+    return FILTER_MAP[platform].filter(raw_cookie)
+
+
 
 def get_logger(plaform: str):
     folder_ = "./log/"

@@ -338,6 +338,8 @@ class DouYinCrawler(AbstractCrawler):
     async def create_douyin_client(self, httpx_proxy: Optional[str]) -> DouYinClient:
         """Create douyin client"""
         cookie_str, cookie_dict = utils.convert_cookies(await self.browser_context.cookies())  # type: ignore
+        cookie_dict = utils.route_cookie("douyin", cookie_dict)
+        cookie_str = utils.cookie_dict_to_str(cookie_dict)
         douyin_client = DouYinClient(
             proxy=httpx_proxy,
             headers={

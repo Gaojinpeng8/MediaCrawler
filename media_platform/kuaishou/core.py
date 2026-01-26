@@ -123,8 +123,8 @@ class KuaishouCrawler(AbstractCrawler):
                 self.browser_context = await self.launch_browser(
                     chromium, None, self.user_agent, headless=self.config.HEADLESS
                 )
-                # 添加stealth.min.js脚本防止网站检测到爬虫
-                await self.browser_context.add_init_script(path="libs/stealth.min.js")
+            # 添加stealth.min.js脚本防止网站检测到爬虫
+            await self.browser_context.add_init_script(path="libs/stealth.min.js")
 
             # 创建新的浏览器页面对象并访问快手首页
             self.context_page = await self.browser_context.new_page()
@@ -467,7 +467,8 @@ class KuaishouCrawler(AbstractCrawler):
         cookie_str, cookie_dict = utils.convert_cookies(
             await self.browser_context.cookies()
         )
-        
+        cookie_dict = utils.route_cookie("ks", cookie_dict)
+        cookie_str = utils.cookie_dict_to_str(cookie_dict)
         # 创建快手API客户端实例
         ks_client_obj = KuaiShouClient(
             proxy=httpx_proxy,

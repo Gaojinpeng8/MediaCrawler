@@ -70,6 +70,22 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
 
         async with httpx.AsyncClient(proxy=self.proxy) as client:
             response = await client.request(method, url, timeout=self.timeout, **kwargs)
+    # 1️⃣ 先检查状态码
+        if response.status_code != 200:
+            raise RuntimeError(
+                f"HTTP {response.status_code}, body={response.text[:200]}"
+            )
+
+        # 2️⃣ 内容为空
+        if not response.text.strip():
+            raise RuntimeError("响应体为空，可能被反爬或风控拦截")
+
+        # 3️⃣ Content-Type 检查
+        content_type = response.headers.get("Content-Type", "")
+        if "application/json" not in content_type:
+            raise RuntimeError(
+                f"非 JSON 响应: {content_type}, body={response.text[:200]}"
+            )
         data: Dict = response.json()
         if data.get("errors"):
             raise DataFetchError(data.get("errors", "unkonw error"))
@@ -136,7 +152,10 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
         return ping_flag
 
     async def update_cookies(self, browser_context: BrowserContext):
+        # raw = await browser_context.cookies()
+        # cookie_str, cookie_dict = trim_cookies("kuaishou", raw)
         cookie_str, cookie_dict = utils.convert_cookies(await browser_context.cookies())
+        cookie_str = utils.route_cookie("ks", cookie_dict)
         self.headers["Cookie"] = cookie_str
         self.cookie_dict = cookie_dict
 
