@@ -63,14 +63,14 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
         self.init_proxy_pool(proxy_ip_pool)
         self.logger = utils.get_logger("ks")
         self.config = config
-        
+
     async def request(self, method, url, **kwargs) -> Any:
         # Check if proxy is expired before each request
         await self._refresh_proxy_if_expired()
 
         async with httpx.AsyncClient(proxy=self.proxy) as client:
             response = await client.request(method, url, timeout=self.timeout, **kwargs)
-    # 1️⃣ 先检查状态码
+        # 1️⃣ 先检查状态码
         if response.status_code != 200:
             raise RuntimeError(
                 f"HTTP {response.status_code}, body={response.text[:200]}"
@@ -155,7 +155,7 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
         # raw = await browser_context.cookies()
         # cookie_str, cookie_dict = trim_cookies("kuaishou", raw)
         cookie_str, cookie_dict = utils.convert_cookies(await browser_context.cookies())
-        cookie_str = utils.route_cookie("ks", cookie_dict)
+        # cookie_str = utils.route_cookie("ks", cookie_dict)
         self.headers["Cookie"] = cookie_str
         self.cookie_dict = cookie_dict
 
@@ -264,7 +264,9 @@ class KuaiShouClient(AbstractApiClient, ProxyRefreshMixin):
             comments = comments_res.get("rootCommentsV2", [])
             if len(result) + len(comments) > max_count:
                 comments = comments[: max_count - len(result)]
-            if callback:  # If there is a callback function, execute the callback function
+            if (
+                callback
+            ):  # If there is a callback function, execute the callback function
                 await callback(photo_id, comments, self.config)
             self.config.KS_CRAWLER_COMMENT_CNT += len(comments)
             result.extend(comments)
