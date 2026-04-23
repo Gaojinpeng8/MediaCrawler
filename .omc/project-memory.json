@@ -1,0 +1,459 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1776919675535,
+  "projectRoot": "/Users/jaypingao/Desktop/cqupt/社会心态/MediaCrawler",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "Python",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "pyproject.toml",
+          "requirements.txt"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "fastapi",
+        "version": null,
+        "category": "backend"
+      },
+      {
+        "name": "pytest",
+        "version": null,
+        "category": "testing"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": "pytest",
+    "lintCommand": "ruff check",
+    "devCommand": null,
+    "scripts": {
+      "docs:dev": "vitepress dev docs",
+      "docs:build": "vitepress build docs",
+      "docs:preview": "vitepress preview docs"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "docs",
+      "test",
+      "tests"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "__pycache__": {
+      "path": "__pycache__",
+      "purpose": null,
+      "fileCount": 3,
+      "lastAccessed": 1776919675459,
+      "keyFiles": [
+        "async_db.cpython-311.pyc",
+        "db.cpython-311.pyc",
+        "var.cpython-311.pyc"
+      ]
+    },
+    "api": {
+      "path": "api",
+      "purpose": "API routes",
+      "fileCount": 2,
+      "lastAccessed": 1776919675465,
+      "keyFiles": [
+        "__init__.py",
+        "main.py"
+      ]
+    },
+    "base": {
+      "path": "base",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1776919675466,
+      "keyFiles": [
+        "__init__.py",
+        "base_crawler.py"
+      ]
+    },
+    "browser_data": {
+      "path": "browser_data",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1776919675466,
+      "keyFiles": []
+    },
+    "cache": {
+      "path": "cache",
+      "purpose": null,
+      "fileCount": 5,
+      "lastAccessed": 1776919675466,
+      "keyFiles": [
+        "__init__.py",
+        "abs_cache.py",
+        "cache_factory.py",
+        "local_cache.py",
+        "redis_cache.py"
+      ]
+    },
+    "cmd_arg": {
+      "path": "cmd_arg",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1776919675466,
+      "keyFiles": [
+        "__init__.py",
+        "arg.py"
+      ]
+    },
+    "config": {
+      "path": "config",
+      "purpose": "Configuration files",
+      "fileCount": 12,
+      "lastAccessed": 1776919675467,
+      "keyFiles": [
+        "__init__.py",
+        "base_config.py",
+        "bilibili_config.py",
+        "db_config.py",
+        "dy_config.py"
+      ]
+    },
+    "constant": {
+      "path": "constant",
+      "purpose": null,
+      "fileCount": 3,
+      "lastAccessed": 1776919675467,
+      "keyFiles": [
+        "__init__.py",
+        "baidu_tieba.py",
+        "zhihu.py"
+      ]
+    },
+    "database": {
+      "path": "database",
+      "purpose": null,
+      "fileCount": 5,
+      "lastAccessed": 1776919675467,
+      "keyFiles": [
+        "__init__.py",
+        "db.py",
+        "db_session.py",
+        "models.py",
+        "mongodb_store_base.py"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 21,
+      "lastAccessed": 1776919675468,
+      "keyFiles": [
+        "CDP模式使用指南.md",
+        "STZHONGS.TTF",
+        "data_storage_guide.md",
+        "excel_export_guide.md",
+        "hit_stopwords.txt"
+      ]
+    },
+    "libs": {
+      "path": "libs",
+      "purpose": null,
+      "fileCount": 3,
+      "lastAccessed": 1776919675468,
+      "keyFiles": [
+        "douyin.js",
+        "stealth.min.js",
+        "zhihu.js"
+      ]
+    },
+    "log": {
+      "path": "log",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1776919675468,
+      "keyFiles": []
+    },
+    "media_platform": {
+      "path": "media_platform",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1776919675468,
+      "keyFiles": [
+        "__init__.py"
+      ]
+    },
+    "model": {
+      "path": "model",
+      "purpose": null,
+      "fileCount": 8,
+      "lastAccessed": 1776919675469,
+      "keyFiles": [
+        "__init__.py",
+        "m_baidu_tieba.py",
+        "m_bilibili.py",
+        "m_douyin.py",
+        "m_kuaishou.py"
+      ]
+    },
+    "proxy": {
+      "path": "proxy",
+      "purpose": null,
+      "fileCount": 5,
+      "lastAccessed": 1776919675469,
+      "keyFiles": [
+        "__init__.py",
+        "base_proxy.py",
+        "proxy_ip_pool.py",
+        "proxy_mixin.py",
+        "types.py"
+      ]
+    },
+    "schema": {
+      "path": "schema",
+      "purpose": null,
+      "fileCount": 3,
+      "lastAccessed": 1776919675469,
+      "keyFiles": [
+        "__init__.py",
+        "factory.py",
+        "tables.sql"
+      ]
+    },
+    "social_monitor": {
+      "path": "social_monitor",
+      "purpose": null,
+      "fileCount": 8,
+      "lastAccessed": 1776919675469,
+      "keyFiles": [
+        "history_stats_calculator.py",
+        "llm_client.py",
+        "main.py",
+        "main_crawler.py",
+        "main_with_history.py"
+      ]
+    },
+    "store": {
+      "path": "store",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1776919675470,
+      "keyFiles": [
+        "__init__.py",
+        "excel_store_base.py"
+      ]
+    },
+    "test": {
+      "path": "test",
+      "purpose": "Test files",
+      "fileCount": 7,
+      "lastAccessed": 1776919675470,
+      "keyFiles": [
+        "__init__.py",
+        "test_db_sync.py",
+        "test_expiring_local_cache.py",
+        "test_mongodb_integration.py",
+        "test_proxy_ip_pool.py"
+      ]
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 4,
+      "lastAccessed": 1776919675471,
+      "keyFiles": [
+        "__init__.py",
+        "conftest.py",
+        "test_excel_store.py",
+        "test_store_factory.py"
+      ]
+    },
+    "tools": {
+      "path": "tools",
+      "purpose": null,
+      "fileCount": 12,
+      "lastAccessed": 1776919675471,
+      "keyFiles": [
+        "__init__.py",
+        "app_runner.py",
+        "async_file_writer.py",
+        "browser_launcher.py",
+        "cdp_browser.py"
+      ]
+    },
+    "api/schemas": {
+      "path": "api/schemas",
+      "purpose": "Schema definitions",
+      "fileCount": 2,
+      "lastAccessed": 1776919675472,
+      "keyFiles": [
+        "__init__.py",
+        "crawler.py"
+      ]
+    },
+    "api/services": {
+      "path": "api/services",
+      "purpose": "Business logic services",
+      "fileCount": 2,
+      "lastAccessed": 1776919675472,
+      "keyFiles": [
+        "__init__.py",
+        "crawler_manager.py"
+      ]
+    },
+    "docs/static": {
+      "path": "docs/static",
+      "purpose": "Static files",
+      "fileCount": 0,
+      "lastAccessed": 1776919675475,
+      "keyFiles": []
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "social_monitor/main.py",
+      "accessCount": 16,
+      "lastAccessed": 1776935462059,
+      "type": "file"
+    },
+    {
+      "path": "schema/async_db/monitor_db.py",
+      "accessCount": 6,
+      "lastAccessed": 1776934698586,
+      "type": "file"
+    },
+    {
+      "path": "schema/tables.sql",
+      "accessCount": 2,
+      "lastAccessed": 1776933418742,
+      "type": "file"
+    },
+    {
+      "path": "config/base_config.py",
+      "accessCount": 2,
+      "lastAccessed": 1776933840583,
+      "type": "file"
+    },
+    {
+      "path": "schema/entity/monitor_plan.py",
+      "accessCount": 1,
+      "lastAccessed": 1776932970926,
+      "type": "file"
+    },
+    {
+      "path": "db.py",
+      "accessCount": 1,
+      "lastAccessed": 1776933386321,
+      "type": "file"
+    },
+    {
+      "path": "var.py",
+      "accessCount": 1,
+      "lastAccessed": 1776933386429,
+      "type": "file"
+    },
+    {
+      "path": "config/db_config.py",
+      "accessCount": 1,
+      "lastAccessed": 1776933386482,
+      "type": "file"
+    },
+    {
+      "path": ".env.example",
+      "accessCount": 1,
+      "lastAccessed": 1776933386534,
+      "type": "file"
+    },
+    {
+      "path": "database/db.py",
+      "accessCount": 1,
+      "lastAccessed": 1776933400926,
+      "type": "file"
+    },
+    {
+      "path": "async_db.py",
+      "accessCount": 1,
+      "lastAccessed": 1776933400984,
+      "type": "file"
+    },
+    {
+      "path": "config/__init__.py",
+      "accessCount": 1,
+      "lastAccessed": 1776933418637,
+      "type": "file"
+    },
+    {
+      "path": "database/models.py",
+      "accessCount": 1,
+      "lastAccessed": 1776933418689,
+      "type": "file"
+    },
+    {
+      "path": "database/db_session.py",
+      "accessCount": 1,
+      "lastAccessed": 1776933435087,
+      "type": "file"
+    },
+    {
+      "path": "social_monitor/main_crawler.py",
+      "accessCount": 1,
+      "lastAccessed": 1776933693337,
+      "type": "file"
+    },
+    {
+      "path": "cmd_arg/arg.py",
+      "accessCount": 1,
+      "lastAccessed": 1776933859203,
+      "type": "file"
+    },
+    {
+      "path": "docs/superpowers/specs/2026-04-23-keyword-crawl-concurrency-design.md",
+      "accessCount": 1,
+      "lastAccessed": 1776934176046,
+      "type": "file"
+    },
+    {
+      "path": "social_monitor/utils.py",
+      "accessCount": 1,
+      "lastAccessed": 1776934287483,
+      "type": "file"
+    },
+    {
+      "path": "base/base_crawler.py",
+      "accessCount": 1,
+      "lastAccessed": 1776934459764,
+      "type": "file"
+    },
+    {
+      "path": "social_monitor/mcp_client.py",
+      "accessCount": 1,
+      "lastAccessed": 1776935033767,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"grep -n \\\"async def start\\\" /Users/jaypingao/Desktop/cqupt/社会心态/MediaCrawler/media_platform/weibo/crawler.py\",\"description\":\"Find Weibo crawler start method\"}",
+  "error": "Exit code 2\nugrep: warning: /Users/jaypingao/Desktop/cqupt/社会心态/MediaCrawler/media_platform/weibo/crawler.py: No such file or directory",
+  "timestamp": "2026-04-23T08:55:22.002Z",
+  "retry_count": 1
+}

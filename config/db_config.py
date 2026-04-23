@@ -25,7 +25,7 @@ MYSQL_DB_PWD = os.getenv("MYSQL_DB_PWD", "cqu1701")
 MYSQL_DB_USER = os.getenv("MYSQL_DB_USER", "root")
 MYSQL_DB_HOST = os.getenv("MYSQL_DB_HOST", "10.242.14.65")
 MYSQL_DB_PORT = os.getenv("MYSQL_DB_PORT", 3306)
-MYSQL_DB_NAME = os.getenv("MYSQL_DB_NAME", "social_monitor_dev")
+MYSQL_DB_NAME = os.getenv("MYSQL_DB_NAME", "social_monitor")
 
 # 统一使用 URL 供 db.py 解析
 RELATION_DB_URL = f"mysql://{MYSQL_DB_USER}:{MYSQL_DB_PWD}@{MYSQL_DB_HOST}:{MYSQL_DB_PORT}/{MYSQL_DB_NAME}"
