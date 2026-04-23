@@ -79,7 +79,7 @@ async def get_keywords(
 
     # 初始化数据库连接和搜索工具
     search_keywords_db = SearchKeywordsDB()
-    search_tools = [KIMISearch(), BAIDUSearch()]  # 使用KIMI和百度搜索工具
+    search_tools = [KIMISearch()]  # 使用KIMI和百度搜索工具
     search_task_list = {}  # 存储监控方案ID与关键词的映射
 
     # 遍历所有监控方案，显示详细进度
@@ -105,7 +105,7 @@ async def get_keywords(
                 # 检查是否在监控时间间隔内
                 current_time = datetime_to_bigint(datetime.datetime.now())
                 # 是否需要检查
-                check_flag = True
+                check_flag = False
                 if check_flag or within_hours(
                     check_time, current_time, monitor_time_interval
                 ):
@@ -153,6 +153,45 @@ async def get_keywords(
     return search_task_list
 
 
+# 关键词并发爬取最大数量（同时最多几个关键词在爬取）
+MAX_KEYWORD_CONCURRENCY = 5
+
+
+async def _crawl_single_keyword(
+    monitor_id: int,
+    keyword: str,
+    search_keyword_id: int,
+    tmp_monitor,
+    max_crawler_notes_count: int,
+    config_obj,
+    cache,
+    sem: asyncio.Semaphore,
+):
+    """并发爬取单个关键词（各平台串行，使用独立爬虫实例避免竞争）"""
+    async with sem:
+        # 为当前关键词创建独立的爬虫实例，避免并发时 config 互相覆盖
+        keyword_crawlers = MainCrawler(["ks", "douyin", "wb", "zh"], config_obj)
+        await keyword_crawlers.init_and_login()
+
+        for platform, crawler in keyword_crawlers.crawlers.items():
+            if not judge_platform_contain_relation(platform, tmp_monitor.platform):
+                continue
+            crawler.config.MONITOR_PLAN_ID = monitor_id
+            crawler.config.KEYWORDS = keyword
+            crawler.config.SEARCH_KEYWORD_ID = f"{search_keyword_id}-{keyword}"
+            crawler.config.CRAWLER_MAX_NOTES_COUNT = max_crawler_notes_count
+            crawler.config.CRAWLER_TYPE = "search"
+            crawler.config.END_PAGE = 4
+            crawler.config.ENABLE_GET_SUB_COMMENTS = False
+            crawler.config.START_PAGE = 1
+            crawler.config.HEADLESS = False
+
+            await crawler.start()
+
+        cache.mark_done(monitor_id, keyword)
+        print(f"关键词 {keyword} 所有平台爬取完成，已写入缓存")
+
+
 async def init_monitor_plan(config_obj, num_keywords=15, max_crawler_notes_count=15):
     """
     初始化监控方案，获取社会热点事件并爬取相关内容
@@ -161,7 +200,7 @@ async def init_monitor_plan(config_obj, num_keywords=15, max_crawler_notes_count
     1. 获取需要初始化的监控方案
     2. 为每个方案获取热点关键词
     3. 初始化爬虫并登录各平台
-    4. 对每个关键词在各平台进行搜索和爬取
+    4. 对每个关键词在各平台进行搜索和爬取（关键词级并发）
     5. 更新关键词和监控方案的最后更新时间
 
     参数:
@@ -184,20 +223,16 @@ async def init_monitor_plan(config_obj, num_keywords=15, max_crawler_notes_count
 
     print("=====获取社会上对热点在各个平台上的看法。=========")
 
-    # 初始化关键词数据库连接和爬虫
+    # 初始化关键词数据库连接
     search_keywords_db = SearchKeywordsDB()
-    # crawlers = MainCrawler(
-    #     ["ks", "douyin", "wb", "zh"], config_obj
-    # )  # 初始化快手、抖音、微博、知乎爬虫
-    crawlers = MainCrawler(["ks", "douyin", "wb"], config_obj)  # 仅微博爬虫（测试用）
-
-    # 初始化爬虫并登录各平台
-    await crawlers.init_and_login()
 
     # 初始化进度缓存，用于记录已完成的关键词爬取
     cache = KeywordProgressCache()
 
-    # 遍历所有监控方案和对应的关键词
+    # 信号量控制关键词并发数
+    sem = asyncio.Semaphore(MAX_KEYWORD_CONCURRENCY)
+
+    # 遍历所有监控方案
     for monitor_id, search_keywords in search_task_list.items():
         # 获取当前监控方案的详细信息
         tmp_monitor = await monitor_plan_db.select_monitor_by_plan_id(monitor_id)
@@ -212,33 +247,17 @@ async def init_monitor_plan(config_obj, num_keywords=15, max_crawler_notes_count
         ]
         print(f"当前监控方案 {monitor_id} 待爬取关键词数量: {len(keywords_to_run)}")
 
-        # 遍历所有待爬取关键词
-        for keyword in keywords_to_run:
-            # 遍历所有爬虫平台
-            for platform, crawler in crawlers.crawlers.items():
-                # 检查当前平台是否在监控方案的平台列表中
-                if judge_platform_contain_relation(platform, tmp_monitor.platform):
-                    # 配置爬虫参数
-                    crawler.config.MONITOR_PLAN_ID = monitor_id  # 监控方案ID
-                    crawler.config.KEYWORDS = keyword  # 搜索关键词
-                    crawler.config.SEARCH_KEYWORD_ID = (
-                        f"{search_keywords[-1]}-{keyword}"  # 组合搜索关键词ID
-                    )
-                    crawler.config.CRAWLER_MAX_NOTES_COUNT = (
-                        max_crawler_notes_count  # 最大爬取数量
-                    )
-                    crawler.config.CRAWLER_TYPE = "search"  # 爬取类型为搜索
-                    crawler.config.END_PAGE = 4  # 结束页码
-                    crawler.config.ENABLE_GET_SUB_COMMENTS = False  # 不获取子评论
-                    crawler.config.START_PAGE = 1  # 开始页码
-                    crawler.config.HEADLESS = False  # 非无头模式
-
-                    # 启动爬虫
-                    await crawler.start()
-
-            # 该关键词所有平台爬取完成，标记为已完成
-            cache.mark_done(monitor_id, keyword)
-            print(f"关键词 {keyword} 所有平台爬取完成，已写入缓存")
+        # 并发爬取所有关键词（受信号量限制，同时最多 MAX_KEYWORD_CONCURRENCY 个）
+        tasks = [
+            _crawl_single_keyword(
+                monitor_id, kw, search_keywords[-1],
+                tmp_monitor, max_crawler_notes_count,
+                config_obj, cache, sem,
+            )
+            for kw in keywords_to_run
+        ]
+        if tasks:
+            await asyncio.gather(*tasks)
 
         # 更新关键词的最后更新时间和间隔
         await search_keywords_db.update_last_update_time_and_interval(

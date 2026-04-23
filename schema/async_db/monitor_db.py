@@ -19,7 +19,7 @@ class MonitorPlanDB:
         # 使用 SQLAlchemy ORM 模型构建查询
         
         async_db_conn: AsyncMysqlDB = self.db.get()
-        sql: str  = f"select * from monitor_plan"
+        sql: str  = f"select * from monitor_plan order by create_time desc"
         result = await async_db_conn.query(sql, map_to=MonitorPlanEntity)
         return result
     async def select_init_monitor(self) -> List[MonitorPlanEntity]:
@@ -27,7 +27,7 @@ class MonitorPlanDB:
         
         async_db_conn: AsyncMysqlDB = self.db.get()
         # sql: str  = f"SELECT * FROM monitor_plan WHERE last_update_tim e IS NOT NULL AND ABS(last_update_time - create_time) <= 10000;"
-        sql: str  = f"SELECT * FROM monitor_plan;"
+        sql: str  = f"SELECT * FROM monitor_plan ORDER BY create_time DESC;"
         result = await async_db_conn.query(sql, map_to=MonitorPlanEntity)
         return result
     
